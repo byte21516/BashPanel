@@ -1,0 +1,14 @@
+services:
+  bashpanel:
+    image: byte21516/bashpanel:latest
+    container_name: bashpanel
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./bashpanel-scripts:/app/scripts           # WebUI Upload/Download
+      - /home/USER/.ssh/id_ed25519_bashpanel:/root/.ssh/id_ed25519:ro  # Mount SSH-Key read-only
+      - /home/USER/.ssh/id_ed25519_bashpanel.pub:/root/.ssh/id_ed25519.pub:ro
+    environment:
+      - PORT=3001
+      - HOST_USER=USER
+      - SSH_KEY_PATH=/root/.ssh/id_ed25519

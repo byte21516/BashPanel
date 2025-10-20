@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>BashPanel</title>
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="icon" type="image/png" href="favicon.png">
+<style>
+:root{
+  --bg:#181818; --panel:#0f1620; --panel-2:#121217; --neon:#00e6a8;
+  --accent:#6ef0ff; --muted:#9aa7b2; --glass: rgba(255,255,255,0.03);
+}
+html,body{height:100%;margin:0;background:#181818;font-family:'Roboto Mono',monospace; font-size:12px; color:var(--muted);}
+.wrap{max-width:1200px;margin:18px auto;padding:18px;}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;}
+.brand{display:flex;align-items:center;gap:12px;}
+.logo{width:56px;height:56px;border-radius:8px;background:linear-gradient(135deg,#001b1a 0%,#002e4d 100%);box-shadow:0 6px 18px rgba(0,230,168,0.06),0 0 18px rgba(0,230,168,0.04) inset;display:flex;align-items:center;justify-content:center;color:var(--neon);font-weight:700;border:1px solid rgba(0,230,168,0.12);}
+h1{margin:0;font-size:20px;color:var(--neon);}
+.sub{color:var(--muted);font-size:12px;}
+.grid{display:grid;grid-template-columns:1fr 360px;gap:16px;align-items:start;}
+.left{display:flex;flex-direction:column;gap:12px;}
+.panels{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;}
+.card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.02));border:1px solid rgba(255,255,255,0.04);padding:12px;border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,0.6);transition:transform .12s ease, box-shadow .12s ease;position:relative;}
+.card:hover{transform:translateY(-4px);box-shadow:0 10px 30px rgba(0,0,0,0.7);}
+.card-title{font-weight:700;margin-bottom:8px;color:#bfffe3;word-break:break-word;overflow-wrap:anywhere;}
+.panel-title{font-size:13px;color:var(--accent);margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;}
+.btn{display:inline-block;padding:8px 12px;border-radius:8px;border:none;cursor:pointer;background:linear-gradient(90deg, rgba(0,230,168,0.12), rgba(110,240,255,0.06));color:var(--neon);font-weight:700;text-shadow:0 1px 0 rgba(0,0,0,0.6);transition: transform .08s ease, box-shadow .08s;box-shadow:0 6px 18px rgba(0,230,168,0.03); font-family:'Roboto Mono', monospace;}
+.btn:hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(0,230,168,0.06);}
+.right{display:flex;flex-direction:column;gap:12px;}
+.editor{padding:12px;border-radius:10px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.02));border:1px solid rgba(255,255,255,0.03);}
+label{display:block;margin-bottom:6px;}
+input[type="text"],textarea{
+  width:100%;
+  box-sizing:border-box;
+  padding:10px;
+  border-radius:8px;
+  border:1px solid rgba(255,255,255,0.04);
+  background:var(--panel-2);
+  color:#dff;
+  resize:vertical;
+  font-family:'Roboto Mono', monospace;
+  font-size:12px;
+  line-height:1.35;
+  margin-bottom:12px;
+}
+/* 🟢 Kein Highlight bei Fokus */
+input[type="text"]:focus,
+textarea:focus {
+  outline: none;
+  border-color: rgba(255,255,255,0.04);
+  box-shadow: none;
+  background: var(--panel-2);
+}
+textarea{min-height:160px;}
+#logs{background:linear-gradient(180deg,#000,#060606);border-radius:10px;padding:12px;min-height:220px;color:#9fffe8;font-size:12px;overflow:auto;border:1px solid rgba(0,230,168,0.06);}
+a{font-family:'Orbitron',sans-serif;font-weight:bold;color:#0ff;text-decoration:none;position:relative;transition:0.3s ease,color 0.3s ease,transform 0.3s ease;letter-spacing:1px;}
+a::before,a::after{content:'';position:absolute;width:0%;height:2px;background-color:#0ff;transition:0.3s ease;}
+a::before{top:0;left:0;}
+a::after{bottom:0;right:0;left:auto;}
+a:hover::before,a:hover::after{width:100%;}
+a:hover{color:#f0f;text-shadow:0 0 5px #0ff,0 0 10px #0ff,0 0 20px #f0f,0 0 30px #f0f;transform:scale(1.05);}
+
+/* Modal Styles */
+.modal {
+  display: none;
+  position: fixed;
+  z-index: 9999;
+  left: 0; top: 0; width: 100%; height: 100%;
+  background-color: rgba(0,0,0,0.6);
+  justify-content: center;
+  align-items: center;
+}
+.modal-content {
+  background-color: var(--panel-2);
+  padding: 16px;
+  border-radius: 10px;
+  width: 260px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.modal-content .btn.close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+.modal-body {
+  margin-top: 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Shared message modal */
+#messageModal .modal-content {
+  width: 300px;
+  text-align: center;
+}
+
+/* 🔴 Delete Button Styling */
+.btn.delete {
+  background: linear-gradient(90deg, rgba(255, 60, 60, 0.18), rgba(255, 0, 0, 0.12));
+  color: #ff6b6b;
+  border: 1px solid rgba(255, 0, 0, 0.2);
+  box-shadow: 0 6px 18px rgba(255, 0, 0, 0.08);
+}
+.btn.delete:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px rgba(255, 0, 0, 0.2);
+  color: #ffb3b3;
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div class="brand">
+    <div class="logo">
+      <img src="favicon.png" style="width:100%; height:100%; object-fit:cover; border-radius:8px;">
+    </div>
+    <div>
+      <h1>BashPanel</h1>
+      <div class="sub">Made by <a href="https://bytesofprogress.net" target="_blank">byte21516</a>.</div>
+    </div>
+  </div>
+  <div class="meta">Execute BASH scripts via WebUI</div>
+</header>
+
+<div class="grid">
+  <div class="left">
+    <div class="card">
+      <div class="panel-title"><span>Available Scripts</span><span class="meta" id="scriptCount">0</span></div>
+      <div id="scriptList" class="panels"></div>
+    </div>
+  </div>
+
+  <div class="right">
+    <div class="editor card">
+      <div class="panel-title"><span>New Script Creator</span><span class="meta">Write & Deploy</span></div>
+      <label>Filename (sh added if missing.)</label>
+      <input id="newFilename" type="text" placeholder="example-deploy.sh" />
+      <label>Script content</label>
+      <textarea id="newContent" placeholder="#!/usr/bin/env bash\n"></textarea>
+      <div style="display:flex; gap:8px; margin-top:8px;">
+        <button id="uploadScriptBtn" class="btn">✦ Deploy Script</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+        <span>Live Output</span>
+        <button id="killBtn" class="btn" style="padding:4px 8px;">✖ Kill Current</button>
+      </div>
+      <div id="logs"></div>
+    </div>
+  </div>
+</div>
+
+<br />
+<div class="sub">Made by <a href="https://bytesofprogress.net" target="_blank">byte21516</a>.</div>
+</div>
+
+<!-- Script Modal -->
+<div id="scriptModal" class="modal">
+  <div class="modal-content">
+    <button class="btn close" id="modalClose">✖</button>
+    <div class="modal-body">
+      <button id="modalDownload" class="btn">Download</button>
+      <button id="modalDelete" class="btn delete">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- Message Modal -->
+<div id="messageModal" class="modal">
+  <div class="modal-content">
+    <button class="btn close" id="msgClose">✖</button>
+    <div id="msgText" style="margin-top:40px; color:#dff;"></div>
+    <div style="display:flex; justify-content:center; gap:8px;">
+      <button id="msgOk" class="btn">OK</button>
+      <button id="msgCancel" class="btn" style="display:none;">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const logsEl=document.getElementById('logs');
+const scriptListEl=document.getElementById('scriptList');
+const scriptCountEl=document.getElementById('scriptCount');
+const modal=document.getElementById('scriptModal');
+const modalClose=document.getElementById('modalClose');
+const modalDownload=document.getElementById('modalDownload');
+const modalDelete=document.getElementById('modalDelete');
+const msgModal=document.getElementById('messageModal');
+const msgText=document.getElementById('msgText');
+const msgOk=document.getElementById('msgOk');
+const msgCancel=document.getElementById('msgCancel');
+const msgClose=document.getElementById('msgClose');
+let currentRunId=null;
+let currentScript=null;
+let confirmResolve=null;
+
+function showMessage(text,{confirm=false}={}) {
+  msgText.textContent=text;
+  msgModal.style.display='flex';
+  msgCancel.style.display=confirm?'inline-block':'none';
+  return new Promise(res=>{confirmResolve=res;});
+}
+function closeMessage(result=false){
+  msgModal.style.display='none';
+  if(confirmResolve){confirmResolve(result); confirmResolve=null;}
+}
+msgOk.onclick=()=>closeMessage(true);
+msgCancel.onclick=()=>closeMessage(false);
+msgClose.onclick=()=>closeMessage(false);
+window.onclick=e=>{
+  if(e.target==modal){modal.style.display='none'; currentScript=null;}
+  if(e.target==msgModal){closeMessage(false);}
+};
+
+function appendLog(text,type='out'){
+  const div=document.createElement('div');
+  div.textContent=(type==='err'?'ERR: ':'')+text;
+  if(type==='meta') div.style.opacity='0.7';
+  logsEl.appendChild(div);
+  logsEl.scrollTop=logsEl.scrollHeight;
+}
+
+async function fetchScripts(){
+  const res=await fetch('/api/scripts');
+  const data=await res.json();
+  const scripts=data.scripts||[];
+  scriptListEl.innerHTML='';
+  scriptCountEl.textContent=scripts.length;
+
+  scripts.forEach(name=>{
+    const card=document.createElement('div'); card.className='card';
+    const title=document.createElement('div'); title.className='card-title'; title.textContent=name;
+
+    const row=document.createElement('div');
+    row.style.display='flex'; row.style.justifyContent='space-between'; row.style.alignItems='center'; row.style.gap='8px';
+    const runBtn=document.createElement('button'); runBtn.className='btn'; runBtn.textContent='▶ Run'; runBtn.onclick=()=>runScript(name);
+    const menuBtn=document.createElement('button'); menuBtn.className='btn'; menuBtn.textContent='⋮';
+    menuBtn.onclick=()=>openModal(name);
+
+    row.appendChild(runBtn); row.appendChild(menuBtn);
+    card.appendChild(title); card.appendChild(row);
+    scriptListEl.appendChild(card);
+  });
+}
+
+function openModal(name){
+  currentScript=name;
+  modal.style.display='flex';
+}
+
+modalClose.onclick=()=>{ modal.style.display='none'; currentScript=null; };
+modalDownload.onclick=()=>{ if(currentScript) window.location='/scripts/'+encodeURIComponent(currentScript); modal.style.display='none'; };
+modalDelete.onclick=async()=>{
+  if(!currentScript) return;
+  const ok=await showMessage(`Delete script "${currentScript}"?`,{confirm:true});
+  if(!ok){ modal.style.display='none'; return; }
+  try{
+    const res=await fetch('/api/delete-script?filename='+encodeURIComponent(currentScript),{method:'DELETE'});
+    const data=await res.json();
+    if(data.success){ appendLog('Deleted: '+data.script,'meta'); await fetchScripts(); }
+    else appendLog('Delete failed: '+(data.error||'unknown'),'err');
+  }catch(e){ appendLog('Delete request failed','err'); }
+  modal.style.display='none'; currentScript=null;
+};
+
+async function runScript(scriptName){
+  try{
+    const res=await fetch('/api/run',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({script:scriptName})});
+    const { runId }=await res.json();
+    currentRunId=runId;
+    logsEl.innerHTML=''; appendLog('Joined → '+runId,'meta');
+    const socket=io('/');
+    socket.emit('join',runId);
+    socket.on('stdout',d=>appendLog(d));
+    socket.on('stderr',d=>appendLog(d,'err'));
+    socket.on('exit',({code})=>{ appendLog('Exit '+code,'meta'); if(currentRunId===runId) currentRunId=null; });
+  }catch(e){ appendLog('Run failed: '+(e.message||e),'err'); }
+}
+
+document.getElementById('killBtn').onclick=async()=>{
+  if(!currentRunId){ appendLog('No running script','meta'); return; }
+  try{
+    await fetch('/api/kill',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({ runId: currentRunId })});
+    appendLog('Sent kill signal','meta');
+  }catch(e){ appendLog('Kill failed: '+(e.message||e),'err'); }
+};
+
+document.getElementById('uploadScriptBtn').onclick=async()=>{
+  const filename=document.getElementById('newFilename').value.trim();
+  const content=document.getElementById('newContent').value;
+  if(!filename||!content){ showMessage('Provide filename & content'); return; }
+
+  // Check duplicate
+  const existing = await fetch('/api/scripts').then(r=>r.json()).then(d=>d.scripts||[]);
+  if(existing.includes(filename.endsWith('.sh') ? filename : filename+'.sh')){
+    showMessage('That script already exists.');
+    return;
+  }
+
+  const payload={filename,content};
+  try{
+    const res=await fetch('/api/upload-script',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});
+    const data=await res.json();
+    if(data.success){ appendLog('Deployed: '+data.script,'meta'); await fetchScripts(); document.getElementById('newFilename').value=''; document.getElementById('newContent').value=''; }
+    else showMessage('Upload failed: '+(data.error||'unknown'));
+  }catch(e){ showMessage('Upload request failed'); }
+};
+
+fetchScripts();
+</script>
+</body>
+</html>
