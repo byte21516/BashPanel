@@ -2,6 +2,8 @@
 
 ## Execute BASH scripts via WebUI
 
+https://hub.docker.com/r/byte21516/bashpanel
+
 ### Installation:
 
 #### Setup SSH keys for the server:
